@@ -147,14 +147,14 @@ export default function ConspiracyBoard() {
   // Load shared state
   useEffect(() => {
     (async () => {
-      try { const r = await storage.get("cb-nodes", true); setNodes(JSON.parse(r.value)); } catch { setNodes([]); }
-      try { const r = await storage.get("cb-conns", true); setConnections(JSON.parse(r.value)); } catch { setConnections([]); }
+      try { const r = await window.storage.get("cb-nodes", true); setNodes(JSON.parse(r.value)); } catch { setNodes([]); }
+      try { const r = await window.storage.get("cb-conns", true); setConnections(JSON.parse(r.value)); } catch { setConnections([]); }
       setLoaded(true);
     })();
   }, []);
 
-  const saveNodes = (u) => { setNodes(u); try { storage.set("cb-nodes", JSON.stringify(u), true); } catch {} };
-  const saveConns = (u) => { setConnections(u); try { storage.set("cb-conns", JSON.stringify(u), true); } catch {} };
+  const saveNodes = (u) => { setNodes(u); try { window.storage.set("cb-nodes", JSON.stringify(u), true); } catch {} };
+  const saveConns = (u) => { setConnections(u); try { window.storage.set("cb-conns", JSON.stringify(u), true); } catch {} };
 
   const addNode = (type) => {
     const rect = boardRef.current?.getBoundingClientRect() || { width: 800, height: 600 };
@@ -202,7 +202,7 @@ export default function ConspiracyBoard() {
       if (dragRef.current) {
         setNodes(prev => {
           const updated = prev;
-          try { storage.set("cb-nodes", JSON.stringify(updated), true); } catch {}
+          try { window.storage.set("cb-nodes", JSON.stringify(updated), true); } catch {}
           return updated;
         });
         dragRef.current = null;
@@ -311,7 +311,7 @@ export default function ConspiracyBoard() {
         }
         .toolbar-title {
           font-family: 'Permanent Marker', cursive;
-          font-size: clamp(0.8rem, 3vw, 1.1rem);
+          font-size: clamp(0.9rem, 3vw, 1.3rem);
           color: #f5c842;
           text-shadow: 1px 1px 0 #3a2000;
           margin: 0; flex-shrink: 0;
@@ -319,7 +319,7 @@ export default function ConspiracyBoard() {
         .tool-sep { width: 1px; height: 24px; background: #3a2000; flex-shrink: 0; }
         .tool-btn {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.65rem; padding: 0.35rem 0.7rem;
+          font-size: 0.82rem; padding: 0.35rem 0.7rem;
           border: 2px solid #5a3a0a; background: #2a1400;
           color: #c8a050; cursor: pointer; border-radius: 3px;
           transition: all 0.12s; white-space: nowrap;
@@ -343,7 +343,7 @@ export default function ConspiracyBoard() {
         }
         .add-type-btn {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.65rem; padding: 0.4rem 0.6rem;
+          font-size: 0.82rem; padding: 0.4rem 0.6rem;
           border: 2px solid var(--mc); background: rgba(255,255,255,0.05);
           color: var(--mc); cursor: pointer; border-radius: 3px;
           transition: all 0.12s; display: flex; align-items: center; gap: 0.3rem;
@@ -390,16 +390,16 @@ export default function ConspiracyBoard() {
           display: flex; align-items: center; gap: 0.3rem;
           margin-bottom: 0.3rem; margin-top: 0.2rem;
         }
-        .node-type-icon { font-size: 0.75rem; line-height: 1; flex-shrink: 0; }
+        .node-type-icon { font-size: 0.95rem; line-height: 1; flex-shrink: 0; }
         .node-type-label {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.42rem; text-transform: uppercase; letter-spacing: 0.1em;
+          font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em;
           color: rgba(0,0,0,0.45); flex: 1;
         }
         .node-btns { display: flex; gap: 0.15rem; opacity: 0; transition: opacity 0.15s; }
         .node-card:hover .node-btns { opacity: 1; }
         .node-btn {
-          font-size: 0.55rem; background: rgba(0,0,0,0.1); border: none;
+          font-size: 0.72rem; background: rgba(0,0,0,0.1); border: none;
           color: rgba(0,0,0,0.5); cursor: pointer; padding: 0.1rem 0.25rem;
           border-radius: 2px; transition: all 0.12s; line-height: 1;
         }
@@ -407,12 +407,12 @@ export default function ConspiracyBoard() {
         .node-btn.del:hover { background: rgba(200,0,0,0.2); color: #900; }
         .node-title {
           font-family: 'Permanent Marker', cursive;
-          font-size: 0.78rem; color: #1a0a00; margin: 0 0 0.2rem;
+          font-size: 0.95rem; color: #1a0a00; margin: 0 0 0.2rem;
           line-height: 1.3; word-break: break-word;
         }
         .node-notes {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.62rem; color: #3a2000; margin: 0;
+          font-size: 0.78rem; color: #3a2000; margin: 0;
           line-height: 1.4; word-break: break-word;
           display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
         }
@@ -491,7 +491,7 @@ export default function ConspiracyBoard() {
         }
         .hint {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.55rem; color: #8a6a3a;
+          font-size: 0.72rem; color: #8a6a3a;
           display: flex; align-items: center; gap: 0.3rem;
         }
         .hint span { color: #c8a050; }
@@ -499,7 +499,7 @@ export default function ConspiracyBoard() {
         /* ── Node count badge ── */
         .count-badge {
           font-family: 'Architects Daughter', cursive;
-          font-size: 0.55rem; color: #5a3a0a; margin-left: auto; flex-shrink: 0;
+          font-size: 0.72rem; color: #5a3a0a; margin-left: auto; flex-shrink: 0;
         }
       `}</style>
 
