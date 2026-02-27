@@ -1,5 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { storage } from './storage.js';
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+
+const app = initializeApp({
+  apiKey: "AIzaSyDNgGC-3qksHbOWsKcEh50_5ZE6wH3n8aQ",
+  authDomain: "dnd-tools-1dd87.firebaseapp.com",
+  projectId: "dnd-tools-1dd87",
+  storageBucket: "dnd-tools-1dd87.firebasestorage.app",
+  messagingSenderId: "866582352851",
+  appId: "1:866582352851:web:269ec8b40fc5764425d526"
+});
+const db = getFirestore(app);
+const storage = {
+  async get(key) {
+    const snap = await getDoc(doc(db, "kv", key));
+    if (!snap.exists()) throw new Error("not found");
+    return { value: snap.data().value };
+  },
+  async set(key, value) {
+    await setDoc(doc(db, "kv", key), { value });
+    return { key, value };
+  }
+};
 
 function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
 
