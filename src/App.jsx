@@ -59,7 +59,7 @@ function NodeCard({ node, selected, connecting, onMouseDown, onClick, onEdit, on
         "--nc": nt.color, "--nb": nt.border,
         transform: `rotate(${node.rot || 0}deg)`,
         zIndex: selected ? 20 : 10,
-        width: node.type === "meme" ? 160 : 140,
+        width: node.type === "meme" ? 240 : 200,
       }}
       onMouseDown={onMouseDown}
       onTouchStart={onMouseDown}
@@ -79,7 +79,7 @@ function NodeCard({ node, selected, connecting, onMouseDown, onClick, onEdit, on
       {/* Image */}
       {node.imageUrl && (
         <img src={node.imageUrl} alt={node.title}
-          style={{ width: "100%", borderRadius: "2px", marginBottom: "0.4rem", display: "block", maxHeight: 120, objectFit: "cover" }}
+          style={{ width: "100%", borderRadius: "2px", marginBottom: "0.4rem", display: "block", maxHeight: 180, objectFit: "cover" }}
           onError={e => e.target.style.display = "none"} />
       )}
       {/* Title */}
@@ -369,11 +369,11 @@ export default function ConspiracyBoard() {
           background: var(--nc);
           border: 2px solid var(--nb);
           border-radius: 2px;
-          padding: 0.5rem 0.5rem 0.4rem;
+          padding: 0.7rem 0.7rem 0.6rem;
           cursor: grab;
           box-shadow: 3px 4px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.2);
           transition: box-shadow 0.15s, z-index 0s;
-          min-width: 120px;
+          min-width: 180px;
         }
         .node-card:hover { box-shadow: 5px 6px 0 rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.2); }
         .node-card.selected { box-shadow: 0 0 0 3px #f5c842, 5px 6px 0 rgba(0,0,0,0.4); }
