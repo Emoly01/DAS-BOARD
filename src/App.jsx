@@ -125,14 +125,14 @@ export default function ConspiracyBoard() {
   // Load shared state
   useEffect(() => {
     (async () => {
-      try { const r = await window.storage.get("cb-nodes", true); setNodes(JSON.parse(r.value)); } catch { setNodes([]); }
-      try { const r = await window.storage.get("cb-conns", true); setConnections(JSON.parse(r.value)); } catch { setConnections([]); }
+      try { const r = await storage.get("cb-nodes", true); setNodes(JSON.parse(r.value)); } catch { setNodes([]); }
+      try { const r = await storage.get("cb-conns", true); setConnections(JSON.parse(r.value)); } catch { setConnections([]); }
       setLoaded(true);
     })();
   }, []);
 
-  const saveNodes = (u) => { setNodes(u); try { window.storage.set("cb-nodes", JSON.stringify(u), true); } catch {} };
-  const saveConns = (u) => { setConnections(u); try { window.storage.set("cb-conns", JSON.stringify(u), true); } catch {} };
+  const saveNodes = (u) => { setNodes(u); try { storage.set("cb-nodes", JSON.stringify(u), true); } catch {} };
+  const saveConns = (u) => { setConnections(u); try { storage.set("cb-conns", JSON.stringify(u), true); } catch {} };
 
   const addNode = (type) => {
     const rect = boardRef.current?.getBoundingClientRect() || { width: 800, height: 600 };
@@ -180,7 +180,7 @@ export default function ConspiracyBoard() {
       if (dragRef.current) {
         setNodes(prev => {
           const updated = prev;
-          try { window.storage.set("cb-nodes", JSON.stringify(updated), true); } catch {}
+          try { storage.set("cb-nodes", JSON.stringify(updated), true); } catch {}
           return updated;
         });
         dragRef.current = null;
