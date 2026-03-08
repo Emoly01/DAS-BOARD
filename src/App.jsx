@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
 const app = initializeApp({
   apiKey: "AIzaSyDNgGC-3qksHbOWsKcEh50_5ZE6wH3n8aQ",
@@ -145,16 +145,24 @@ export default function ConspiracyBoard() {
   const panRef = useRef(null);
 
   // Load shared state
+  // ── Real-time listeners — stays in sync across all clients ──
   useEffect(() => {
-    (async () => {
-      try { const r = await storage.get("cb-nodes"); setNodes(JSON.parse(r.value)); } catch { setNodes([]); }
-      try { const r = await storage.get("cb-conns"); setConnections(JSON.parse(r.value)); } catch { setConnections([]); }
-      setLoaded(true);
-    })();
+    const unsubNodes = onSnapshot(doc(db, "kv", "cb-nodes"), (snap) => {
+      if (snap.exists()) {
+        try { setNodes(JSON.parse(snap.data().value)); } catch { setNodes([]); }
+      } else { setNodes([]); }
+    });
+    const unsubConns = onSnapshot(doc(db, "kv", "cb-conns"), (snap) => {
+      if (snap.exists()) {
+        try { setConnections(JSON.parse(snap.data().value)); } catch { setConnections([]); }
+      } else { setConnections([]); }
+    });
+    setLoaded(true);
+    return () => { unsubNodes(); unsubConns(); };
   }, []);
 
-  const saveNodes = (u) => { setNodes(u); try { storage.set("cb-nodes", JSON.stringify(u)); } catch {} };
-  const saveConns = (u) => { setConnections(u); try { storage.set("cb-conns", JSON.stringify(u)); } catch {} };
+  const saveNodes = (u) => { setNodes(u); storage.set("cb-nodes", JSON.stringify(u)).catch(() => {}); };
+  const saveConns = (u) => { setConnections(u); storage.set("cb-conns", JSON.stringify(u)).catch(() => {}); };
 
   const addNode = (type) => {
     const rect = boardRef.current?.getBoundingClientRect() || { width: 800, height: 600 };
@@ -202,7 +210,7 @@ export default function ConspiracyBoard() {
       if (dragRef.current) {
         setNodes(prev => {
           const updated = prev;
-          try { storage.set("cb-nodes", JSON.stringify(updated)); } catch {}
+          storage.set("cb-nodes", JSON.stringify(updated)).catch(() => {});
           return updated;
         });
         dragRef.current = null;
