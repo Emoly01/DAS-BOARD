@@ -34,9 +34,6 @@ const NODE_TYPES = [
   { id: "meme",     label: "Meme",        icon: "💀", color: "#ffe4c4", border: "#c87a3a", pinColor: "#e65100" },
 ];
 
-const INITIAL_POS = () => ({ x: 80 + Math.random() * 300, y: 80 + Math.random() * 200 });
-
-// Slightly wavy SVG path between two points — looks like real string
 function stringPath(x1, y1, x2, y2) {
   const mx = (x1 + x2) / 2;
   const my = (y1 + y2) / 2;
@@ -48,7 +45,23 @@ function stringPath(x1, y1, x2, y2) {
   return `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
 }
 
-function NodeCard({ node, selected, connecting, onMouseDown, onClick, onEdit, onDelete, isConnecting }) {
+// Mid-point of a quadratic bezier (for label placement)
+function bezierMid(x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const sag = Math.min(len * 0.12, 40);
+  const cx = mx - dy * sag / len;
+  const cy = my + dx * sag / len;
+  // Point at t=0.5 on quadratic bezier
+  return {
+    x: 0.25 * x1 + 0.5 * cx + 0.25 * x2,
+    y: 0.25 * y1 + 0.5 * cy + 0.25 * y2,
+  };
+}
+
+function NodeCard({ node, selected, connecting, onMouseDown, onClick, onDoubleClick, onEdit, onDelete, isConnecting }) {
   const nt = NODE_TYPES.find(t => t.id === node.type) || NODE_TYPES[0];
   return (
     <div
@@ -64,10 +77,9 @@ function NodeCard({ node, selected, connecting, onMouseDown, onClick, onEdit, on
       onMouseDown={onMouseDown}
       onTouchStart={onMouseDown}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
     >
-      {/* Pin */}
       <div className="node-pin" style={{ background: nt.pinColor }} />
-      {/* Type label */}
       <div className="node-type-row">
         <span className="node-type-icon">{nt.icon}</span>
         <span className="node-type-label">{nt.label}</span>
@@ -76,15 +88,12 @@ function NodeCard({ node, selected, connecting, onMouseDown, onClick, onEdit, on
           <button className="node-btn del" onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onDelete(); }}>✕</button>
         </div>
       </div>
-      {/* Image */}
       {node.imageUrl && (
         <img src={node.imageUrl} alt={node.title}
           style={{ width: "100%", borderRadius: "2px", marginBottom: "0.4rem", display: "block", maxHeight: 180, objectFit: "cover" }}
           onError={e => e.target.style.display = "none"} />
       )}
-      {/* Title */}
       <p className="node-title">{node.title || "???"}</p>
-      {/* Notes */}
       {node.notes && <p className="node-notes">{node.notes}</p>}
     </div>
   );
@@ -125,15 +134,62 @@ function EditModal({ node, onSave, onCancel }) {
   );
 }
 
+// ── NEW: Inline label editor that floats near the string midpoint ──
+function ConnLabelEditor({ conn, midX, midY, boardOffset, boardScale, onSave, onCancel }) {
+  const [val, setVal] = useState(conn.label || "");
+  const inputRef = useRef(null);
+
+  // Convert board coords → screen coords
+  const screenX = midX * boardScale + boardOffset.x;
+  const screenY = midY * boardScale + boardOffset.y + 50; // +50 for toolbar height
+
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+
+  return (
+    <div style={{
+      position: "fixed",
+      left: screenX, top: screenY,
+      transform: "translate(-50%, -50%)",
+      zIndex: 300,
+      background: "#fffde7",
+      border: "2px solid #c8843a",
+      borderRadius: "3px",
+      padding: "0.4rem 0.5rem",
+      boxShadow: "3px 3px 0 rgba(0,0,0,0.4)",
+      display: "flex", gap: "0.3rem", alignItems: "center",
+    }}>
+      <input
+        ref={inputRef}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter") onSave(val);
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Label..."
+        style={{
+          fontFamily: "'Architects Daughter', cursive",
+          fontSize: "0.82rem",
+          border: "none", borderBottom: "2px dashed #c8a050",
+          background: "transparent", color: "#2a1800",
+          outline: "none", width: "120px", padding: "0.2rem",
+        }}
+      />
+      <button onClick={() => onSave(val)} style={{ fontFamily: "'Permanent Marker', cursive", fontSize: "0.72rem", background: "#e53935", color: "#fff", border: "none", padding: "0.2rem 0.5rem", cursor: "pointer", borderRadius: "2px" }}>✓</button>
+      <button onClick={onCancel} style={{ fontFamily: "'Architects Daughter', cursive", fontSize: "0.72rem", background: "transparent", color: "#5a3a0a", border: "1px solid #c8a050", padding: "0.2rem 0.4rem", cursor: "pointer", borderRadius: "2px" }}>✕</button>
+    </div>
+  );
+}
+
 export default function ConspiracyBoard() {
   const [nodes, setNodes] = useState([]);
   const [connections, setConnections] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [mode, setMode] = useState("drag"); // drag | connect | delete-conn
+  const [mode, setMode] = useState("drag");
   const [connectSource, setConnectSource] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [editingNode, setEditingNode] = useState(null);
-  const [addType, setAddType] = useState("suspect");
+  const [editingConn, setEditingConn] = useState(null); // { conn, midX, midY }
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [boardOffset, setBoardOffset] = useState({ x: 0, y: 0 });
   const [boardScale, setBoardScale] = useState(1);
@@ -141,11 +197,9 @@ export default function ConspiracyBoard() {
   const [hoveredConn, setHoveredConn] = useState(null);
 
   const boardRef = useRef(null);
-  const dragRef = useRef(null); // { nodeId, startX, startY, origX, origY }
+  const dragRef = useRef(null);
   const panRef = useRef(null);
 
-  // Load shared state
-  // ── Real-time listeners — stays in sync across all clients ──
   useEffect(() => {
     const unsubNodes = onSnapshot(doc(db, "kv", "cb-nodes"), (snap) => {
       if (snap.exists()) {
@@ -180,14 +234,36 @@ export default function ConspiracyBoard() {
     setEditingNode(null);
   };
 
-  const deleteNode = (id) => {
-    saveNodes(nodes.filter(n => n.id !== id));
-    saveConns(connections.filter(c => c.a !== id && c.b !== id));
+  const deleteNode = useCallback((id) => {
+    setNodes(prev => {
+      const updated = prev.filter(n => n.id !== id);
+      storage.set("cb-nodes", JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+    setConnections(prev => {
+      const updated = prev.filter(c => c.a !== id && c.b !== id);
+      storage.set("cb-conns", JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
     if (connectSource === id) setConnectSource(null);
     setSelectedNode(null);
-  };
+  }, [connectSource]);
 
-  // Drag nodes
+  // ── NEW: Delete key handler ──
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!selectedNode) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        // Don't fire if an input is focused
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        deleteNode(selectedNode);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedNode, deleteNode]);
+
   const startDrag = useCallback((nodeId, e) => {
     if (mode !== "drag") return;
     e.stopPropagation();
@@ -209,9 +285,8 @@ export default function ConspiracyBoard() {
     const onUp = () => {
       if (dragRef.current) {
         setNodes(prev => {
-          const updated = prev;
-          storage.set("cb-nodes", JSON.stringify(updated)).catch(() => {});
-          return updated;
+          storage.set("cb-nodes", JSON.stringify(prev)).catch(() => {});
+          return prev;
         });
         dragRef.current = null;
       }
@@ -226,7 +301,6 @@ export default function ConspiracyBoard() {
     window.addEventListener("touchend", onUp);
   }, [mode, nodes, boardScale]);
 
-  // Pan board
   const startPan = useCallback((e) => {
     if (mode !== "drag" || dragRef.current) return;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -253,7 +327,6 @@ export default function ConspiracyBoard() {
     window.addEventListener("touchend", onUp);
   }, [mode, boardOffset]);
 
-  // Scroll to zoom
   const onWheel = useCallback((e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.08 : 0.92;
@@ -267,7 +340,33 @@ export default function ConspiracyBoard() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [onWheel]);
 
-  // Connect mode click
+  // ── FIXED: Reset centers the viewport on all existing nodes ──
+  const handleReset = useCallback(() => {
+    if (nodes.length === 0) {
+      setBoardOffset({ x: 0, y: 0 });
+      setBoardScale(1);
+      return;
+    }
+    const rect = boardRef.current?.getBoundingClientRect() || { width: 800, height: 600 };
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs) + 220; // node width approx
+    const maxY = Math.max(...ys) + 140; // node height approx
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const scale = Math.min(
+      1,
+      (rect.width - 80) / contentW,
+      (rect.height - 80) / contentH
+    );
+    const offsetX = rect.width / 2 - (minX + contentW / 2) * scale;
+    const offsetY = rect.height / 2 - (minY + contentH / 2) * scale;
+    setBoardScale(scale);
+    setBoardOffset({ x: offsetX, y: offsetY });
+  }, [nodes]);
+
   const handleNodeClick = (nodeId, e) => {
     e.stopPropagation();
     if (mode === "connect") {
@@ -276,8 +375,7 @@ export default function ConspiracyBoard() {
       } else if (connectSource !== nodeId) {
         const exists = connections.find(c => (c.a === connectSource && c.b === nodeId) || (c.a === nodeId && c.b === connectSource));
         if (!exists) {
-          const label = "";
-          saveConns([...connections, { id: makeId(), a: connectSource, b: nodeId, label }]);
+          saveConns([...connections, { id: makeId(), a: connectSource, b: nodeId, label: "" }]);
         }
         setConnectSource(null);
         setMode("drag");
@@ -289,9 +387,15 @@ export default function ConspiracyBoard() {
 
   const deleteConnection = (connId) => {
     saveConns(connections.filter(c => c.id !== connId));
+    setEditingConn(null);
   };
 
-  // Get center of a node
+  // ── NEW: Save connection label ──
+  const saveConnLabel = (connId, label) => {
+    saveConns(connections.map(c => c.id === connId ? { ...c, label } : c));
+    setEditingConn(null);
+  };
+
   const nodeCenter = (node) => ({
     x: node.x + (node.type === "meme" ? 80 : 70),
     y: node.y + 50,
@@ -309,7 +413,6 @@ export default function ConspiracyBoard() {
         @import url('https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Permanent+Marker&display=swap');
         * { box-sizing: border-box; }
 
-        /* ── Toolbar ── */
         .toolbar {
           position: fixed; top: 0; left: 0; right: 0; z-index: 100;
           background: #1a0a00; border-bottom: 3px solid #5a3a0a;
@@ -340,7 +443,6 @@ export default function ConspiracyBoard() {
         .tool-btn.add:hover { background: #2a7a2a; color: #fff; }
         @keyframes pulse { 0%,100% { box-shadow: 2px 2px 0 #7b241c; } 50% { box-shadow: 2px 2px 8px #ff6b6b; } }
 
-        /* ── Add menu ── */
         .add-menu {
           position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
           background: #1a0a00; border: 2px solid #5a3a0a;
@@ -358,7 +460,6 @@ export default function ConspiracyBoard() {
         }
         .add-type-btn:hover { background: var(--mc); color: #1a0a00; }
 
-        /* ── Cork board ── */
         .cork-board {
           position: absolute; inset: 0; top: 50px;
           cursor: grab;
@@ -371,7 +472,6 @@ export default function ConspiracyBoard() {
         .cork-board.panning { cursor: grabbing; }
         .cork-board.connecting { cursor: crosshair; }
 
-        /* ── Node card ── */
         .node-card {
           position: absolute;
           background: var(--nc);
@@ -380,7 +480,7 @@ export default function ConspiracyBoard() {
           padding: 0.7rem 0.7rem 0.6rem;
           cursor: grab;
           box-shadow: 3px 4px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.2);
-          transition: box-shadow 0.15s, z-index 0s;
+          transition: box-shadow 0.15s;
           min-width: 180px;
         }
         .node-card:hover { box-shadow: 5px 6px 0 rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.2); }
@@ -425,7 +525,6 @@ export default function ConspiracyBoard() {
           display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
         }
 
-        /* ── SVG strings ── */
         .string-svg {
           position: absolute; inset: 0; pointer-events: none; overflow: visible;
         }
@@ -436,13 +535,29 @@ export default function ConspiracyBoard() {
           pointer-events: stroke;
           cursor: pointer;
         }
-        .string-path.hovered { stroke: #ff6b6b; stroke-width: 2.5; pointer-events: stroke; }
+        .string-path.hovered { stroke: #ff6b6b; stroke-width: 2.5; }
         .string-hit {
-          fill: none; stroke: transparent; stroke-width: 12;
+          fill: none; stroke: transparent; stroke-width: 16;
           cursor: pointer; pointer-events: stroke;
         }
 
-        /* ── Edit modal ── */
+        /* ── NEW: connection label tag ── */
+        .conn-label-group { pointer-events: all; cursor: pointer; }
+        .conn-label-bg {
+          fill: #fffde7;
+          stroke: #c8843a;
+          stroke-width: 1;
+          rx: 3;
+        }
+        .conn-label-text {
+          font-family: 'Architects Daughter', cursive;
+          font-size: 11px;
+          fill: #3a2000;
+          text-anchor: middle;
+          dominant-baseline: central;
+          pointer-events: none;
+        }
+
         .modal-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.7);
           z-index: 200; display: flex; align-items: center; justify-content: center;
@@ -491,7 +606,6 @@ export default function ConspiracyBoard() {
           color: #5a3a0a; padding: 0.45rem 0.8rem; cursor: pointer; border-radius: 3px;
         }
 
-        /* ── Instructions ── */
         .hint-bar {
           position: fixed; bottom: 0; left: 0; right: 0;
           background: rgba(0,0,0,0.7); padding: 0.3rem 0.8rem;
@@ -503,8 +617,6 @@ export default function ConspiracyBoard() {
           display: flex; align-items: center; gap: 0.3rem;
         }
         .hint span { color: #c8a050; }
-
-        /* ── Node count badge ── */
         .count-badge {
           font-family: 'Architects Daughter', cursive;
           font-size: 0.72rem; color: #5a3a0a; margin-left: auto; flex-shrink: 0;
@@ -530,7 +642,7 @@ export default function ConspiracyBoard() {
         <button className="tool-btn add" onClick={() => setShowAddMenu(v => !v)}>
           📌 + Hinzufügen
         </button>
-        <button className="tool-btn" onClick={() => { setBoardOffset({ x: 0, y: 0 }); setBoardScale(1); }}>
+        <button className="tool-btn" onClick={handleReset}>
           🎯 Reset
         </button>
         <span className="count-badge">{nodes.length} Knoten · {connections.length} Verbindungen</span>
@@ -562,7 +674,7 @@ export default function ConspiracyBoard() {
           transformOrigin: "0 0",
           width: "3000px", height: "2000px",
         }}>
-          {/* SVG strings */}
+          {/* SVG strings + labels */}
           <svg className="string-svg" width="3000" height="2000">
             {connections.map(conn => {
               const a = nodes.find(n => n.id === conn.a);
@@ -570,30 +682,75 @@ export default function ConspiracyBoard() {
               if (!a || !b) return null;
               const ca = nodeCenter(a), cb = nodeCenter(b);
               const path = stringPath(ca.x, ca.y, cb.x, cb.y);
+              const mid = bezierMid(ca.x, ca.y, cb.x, cb.y);
               const isHovered = hoveredConn === conn.id;
+              const hasLabel = conn.label && conn.label.trim();
+              const labelW = hasLabel ? Math.max(60, conn.label.trim().length * 7 + 16) : 0;
+
               return (
                 <g key={conn.id}>
-                  {/* Invisible hit area */}
                   <path d={path} className="string-hit"
                     onMouseEnter={() => setHoveredConn(conn.id)}
                     onMouseLeave={() => setHoveredConn(null)}
-                    onClick={(e) => { e.stopPropagation(); if (mode === "delete-conn") deleteConnection(conn.id); }} />
-                  {/* Visible string */}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (mode === "delete-conn") {
+                        deleteConnection(conn.id);
+                      } else {
+                        // Click string to edit its label
+                        setEditingConn({ conn, midX: mid.x, midY: mid.y });
+                      }
+                    }} />
                   <path d={path} className={`string-path ${isHovered ? "hovered" : ""}`}
                     onMouseEnter={() => setHoveredConn(conn.id)}
                     onMouseLeave={() => setHoveredConn(null)}
-                    onClick={(e) => { e.stopPropagation(); if (mode === "delete-conn") deleteConnection(conn.id); }} />
-                  {/* Delete X on hover in delete mode */}
-                  {isHovered && mode === "delete-conn" && (() => {
-                    const mx = (ca.x + cb.x) / 2;
-                    const my = (ca.y + cb.y) / 2;
-                    return (
-                      <text x={mx} y={my} textAnchor="middle" dominantBaseline="middle"
-                        style={{ fontSize: "14px", fill: "#ff4444", cursor: "pointer", fontFamily: "sans-serif", pointerEvents: "none" }}>
-                        ✕
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (mode === "delete-conn") {
+                        deleteConnection(conn.id);
+                      } else {
+                        setEditingConn({ conn, midX: mid.x, midY: mid.y });
+                      }
+                    }} />
+
+                  {/* ── NEW: connection label ── */}
+                  {hasLabel && (
+                    <g className="conn-label-group"
+                      onClick={(e) => { e.stopPropagation(); setEditingConn({ conn, midX: mid.x, midY: mid.y }); }}>
+                      <rect
+                        x={mid.x - labelW / 2}
+                        y={mid.y - 10}
+                        width={labelW}
+                        height={20}
+                        rx="3"
+                        className="conn-label-bg"
+                      />
+                      <text
+                        x={mid.x}
+                        y={mid.y}
+                        className="conn-label-text"
+                      >
+                        {conn.label.trim()}
                       </text>
-                    );
-                  })()}
+                    </g>
+                  )}
+
+                  {/* ── NEW: "+" hint on hover (no label yet) ── */}
+                  {!hasLabel && isHovered && mode !== "delete-conn" && (
+                    <text x={mid.x} y={mid.y}
+                      textAnchor="middle" dominantBaseline="middle"
+                      style={{ fontSize: "12px", fill: "#f5c842", fontFamily: "'Architects Daughter', cursive", pointerEvents: "none" }}>
+                      + label
+                    </text>
+                  )}
+
+                  {/* Delete X in delete mode */}
+                  {isHovered && mode === "delete-conn" && (
+                    <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
+                      style={{ fontSize: "14px", fill: "#ff4444", cursor: "pointer", fontFamily: "sans-serif", pointerEvents: "none" }}>
+                      ✕
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -609,6 +766,10 @@ export default function ConspiracyBoard() {
               isConnecting={mode === "connect" && connectSource && connectSource !== node.id}
               onMouseDown={(e) => startDrag(node.id, e)}
               onClick={(e) => handleNodeClick(node.id, e)}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (mode === "drag") setEditingNode({ ...node });
+              }}
               onEdit={() => setEditingNode({ ...node })}
               onDelete={() => deleteNode(node.id)}
             />
@@ -616,7 +777,7 @@ export default function ConspiracyBoard() {
         </div>
       </div>
 
-      {/* Edit modal */}
+      {/* Edit node modal */}
       {editingNode && (
         <EditModal
           node={editingNode}
@@ -625,13 +786,27 @@ export default function ConspiracyBoard() {
         />
       )}
 
+      {/* ── NEW: Connection label editor ── */}
+      {editingConn && (
+        <ConnLabelEditor
+          conn={editingConn.conn}
+          midX={editingConn.midX}
+          midY={editingConn.midY}
+          boardOffset={boardOffset}
+          boardScale={boardScale}
+          onSave={(label) => saveConnLabel(editingConn.conn.id, label)}
+          onCancel={() => setEditingConn(null)}
+        />
+      )}
+
       {/* Hint bar */}
       <div className="hint-bar">
         <div className="hint">✋ <span>Ziehen</span> = Knoten bewegen</div>
+        <div className="hint">🖱 <span>Doppelklick</span> = Knoten bearbeiten</div>
         <div className="hint">🔴 <span>Verbinden</span> = zwei Knoten anklicken</div>
-        <div className="hint">✂️ <span>String löschen</span> = Verbindung anklicken</div>
-        <div className="hint">🖱 <span>Scrollen</span> = Zoom</div>
-        <div className="hint">🎯 <span>Leere Fläche ziehen</span> = Board bewegen</div>
+        <div className="hint">🖱 <span>String anklicken</span> = Label hinzufügen</div>
+        <div className="hint">⌨ <span>Entf</span> = ausgewählten Knoten löschen</div>
+        <div className="hint">🖱 <span>Scrollen</span> = Zoom · <span>Leere Fläche ziehen</span> = Board bewegen</div>
       </div>
     </div>
   );
